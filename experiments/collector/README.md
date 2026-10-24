@@ -73,3 +73,29 @@ Python 3.12.15 and Node 22.23.3: all twelve cases passed. For both languages:
 The run retains configs, collector/emitter logs, synthetic inputs, SQLite observer
 and per-case summary in the `collector-experiment-evidence` artifact. These
 measurements establish the listed synthetic pipeline behaviors only.
+
+## Proposed bounded memory-queue cases
+
+`queue_run.py` uses direct synthetic OTLP requests (not SDK behavior) against the
+same pinned Collector binary. A receiver barrier holds the first request before
+commit while the two-request capacity accepts a second (the in-flight request occupies capacity). Saturation expects a
+third request to return 503 without client retries. Releasing the barrier allows
+the first two to commit. In the restart case, SIGKILL occurs at that same barrier;
+the synthetic receiver discards the interrupted request, the memory queue is
+lost, and a fresh post-restart request proves service recovery.
+
+SQLite retains attempted and committed identities separately. Summaries list
+submitted identities, HTTP-accepted identities, commits and accepted-but-uncommitted
+identities. The latter are observations of this controlled receiver, not evidence
+of non-execution at an arbitrary backend. No persistent queue, power-loss, SDK
+retry, production durability or exactly-once guarantee is claimed.
+
+Run the new workflow or `python experiments/collector/queue_run.py --collector
+/path/to/otelcol --output /new/directory`. All barriers and subprocesses have bounded
+timeouts; historical idle-restart results above do not validate these cases.
+
+Local validation: three accounting tests pass. The real pinned Collector saturation
+case returned 200/200/503 and committed exactly the first two identities. A later
+Collector start failed with `failed to register process metrics: process does not
+exist` in this sandbox. The complete in-flight restart case is therefore unvalidated
+until the hosted job passes; no restart success is claimed by the partial run.
