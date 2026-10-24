@@ -27,6 +27,10 @@ jobs:
           curl -fsSL https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v0.163.2/otelcol_0.163.2_linux_amd64.tar.gz -o "$RUNNER_TEMP/otelcol.tar.gz"
           echo "9fbf3101331c88aab4b7f4cfd7c788b252e91e193793e39bd2154971c87f88a7  $RUNNER_TEMP/otelcol.tar.gz" | sha256sum --check
           tar -xzf "$RUNNER_TEMP/otelcol.tar.gz" -C "$RUNNER_TEMP" otelcol
+      - name: Check queue accounting
+        run: python -m unittest discover -s experiments/collector -p test_queue_accounting.py -v
+      - name: Run memory queue saturation and in-flight restart
+        run: python experiments/collector/queue_run.py --collector "$RUNNER_TEMP/otelcol" --output queue-results
       - name: Run synthetic loopback delivery cases
         env:
           PYTHONPATH: src
@@ -35,4 +39,6 @@ jobs:
         if: always()
         with:
           name: collector-experiment-evidence
-          path: collector-results
+          path: |
+            collector-results
+            queue-results
