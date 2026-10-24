@@ -73,3 +73,25 @@ Python 3.12.15 and Node 22.23.3: all twelve cases passed. For both languages:
 The run retains configs, collector/emitter logs, synthetic inputs, SQLite observer
 and per-case summary in the `collector-experiment-evidence` artifact. These
 measurements establish the listed synthetic pipeline behaviors only.
+
+## Proposed fidelity extension (not covered by the historical run above)
+
+The new `fidelity` case sends three distinct usage events through each SDK and
+compares complete normalized bodies, nanosecond event timestamps, event names
+and the six documented fixture attributes against local evidence. Every attempt
+is archived in SQLite, including duplicates. Missing/foreign events, unexpected
+duplicates and changed fields fail; delivery order is measured separately.
+The TypeScript experiment emitter now carries timestamps and span attributes,
+which its previous hand-written OTel bridge omitted. Runtime SDK code is unchanged.
+
+Run `python -m unittest discover -s experiments/collector -p test_fidelity.py -v`
+for the independent corruption controls. The real collector cases remain in the
+existing workflow. This is usage-fixture fidelity, not exhaustive projection,
+trace-context, all-event-type or production delivery certification. Historical
+twelve-case results do not validate this extension.
+
+Local validation of the extension: four unittest methods pass, including actual
+Python and TypeScript SDK emitters over HTTP and independent corruption controls.
+The direct SDK test is not a Collector run. A full Collector attempt stopped at
+startup with the sandbox process-metrics error quoted above; new Collector
+fidelity results await the hosted workflow. TypeScript build and JS syntax pass.

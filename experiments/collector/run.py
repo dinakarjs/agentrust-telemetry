@@ -15,6 +15,8 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from uuid import uuid4
 
+from fidelity import check_fidelity, projection
+
 from google.protobuf import json_format
 from opentelemetry.proto.collector.logs.v1.logs_service_pb2 import (
     ExportLogsServiceRequest, ExportLogsServiceResponse,
@@ -55,7 +57,8 @@ def run(binary, out):
     with sqlite3.connect(database) as db:
         db.executescript('CREATE TABLE attempts(case_id TEXT,event_id TEXT);'
                          'CREATE TABLE committed(case_id TEXT,event_id TEXT, PRIMARY KEY(case_id,event_id));'
-                         'CREATE TABLE evidence(case_id TEXT,event_id TEXT,body TEXT);')
+                         'CREATE TABLE evidence(case_id TEXT,event_id TEXT,body TEXT);'
+                         'CREATE TABLE projections(case_id TEXT,body TEXT);')
     state = {'case': '', 'mode': '', 'requests': 0}
     lock = threading.Lock()
 
@@ -72,16 +75,18 @@ def run(binary, out):
                 json_format.Parse(body.decode(), request)
             else:
                 request.ParseFromString(body)
-            ids = [next(v.value.string_value for v in record.body.kvlist_value.values
-                        if v.key == 'event_id')
-                   for resource in request.resource_logs for scope in resource.scope_logs
-                   for record in scope.log_records]
+            records = [projection(record)
+                       for resource in request.resource_logs for scope in resource.scope_logs
+                       for record in scope.log_records]
+            ids = [record['body']['event_id'] for record in records]
             with lock:
                 case, mode = state['case'], state['mode']
                 state['requests'] += 1
                 number = state['requests']
             with sqlite3.connect(database) as db:
                 db.executemany('INSERT INTO attempts VALUES (?,?)', [(case, i) for i in ids])
+                db.executemany('INSERT INTO projections VALUES (?,?)',
+                               [(case, json.dumps(record)) for record in records])
                 if not (mode == 'partial' or (mode == 'retry' and number == 1)):
                     db.executemany('INSERT OR IGNORE INTO committed VALUES (?,?)', [(case, i) for i in ids])
             if mode == 'lost_ack' and number == 1:
@@ -107,7 +112,7 @@ def run(binary, out):
                  if k.lower() not in {'http_proxy', 'https_proxy', 'all_proxy'}}
     try:
         for language in ('python', 'typescript'):
-            for mode in ('healthy', 'retry', 'lost_ack', 'partial', 'duplicate', 'restart'):
+            for mode in ('healthy', 'retry', 'lost_ack', 'partial', 'duplicate', 'restart', 'fidelity'):
                 case = f'{language}-{mode}'
                 directory = out / case
                 directory.mkdir()
@@ -128,6 +133,10 @@ def run(binary, out):
                 event = json.loads((ROOT / 'conformance/fixtures/valid/usage.json').read_text())
                 event['event_id'] = str(uuid4())
                 events = [event, event] if mode == 'duplicate' else [event]
+                if mode == 'fidelity':
+                    events = [{**event, 'event_id': str(uuid4()), 'input_tokens': 100 + i,
+                               'time_unix_nano': str(int(event['time_unix_nano']) + i)}
+                              for i in range(3)]
                 (directory / 'input.json').write_text(json.dumps(events))
                 with (directory / 'collector.log').open('wb') as log:
                     process = subprocess.Popen([str(binary), '--config', str(config)],
@@ -135,7 +144,8 @@ def run(binary, out):
                     try:
                         wait_ready(number, process)
                         if mode == 'restart':
-                            process.terminate(); process.wait(timeout=5)
+                            process.terminate()
+                            process.wait(timeout=5)
                             process = subprocess.Popen([str(binary), '--config', str(config)],
                                                        stdout=log, stderr=subprocess.STDOUT, env=clean_env)
                             wait_ready(number, process)
@@ -173,17 +183,28 @@ def run(binary, out):
                         try:
                             process.wait(timeout=5)
                         except subprocess.TimeoutExpired:
-                            process.kill(); process.wait()
+                            process.kill()
+                            process.wait()
                 with sqlite3.connect(database) as db:
                     counts = {table: db.execute(f'SELECT count(*) FROM {table} WHERE case_id=?', (case,)).fetchone()[0]
                               for table in ('evidence', 'attempts', 'committed')}
                 assert counts['evidence'] == len(events), (case, counts)
-                assert counts['committed'] == (0 if mode == 'partial' else 1), (case, counts)
+                assert counts['committed'] == (0 if mode == 'partial' else 3 if mode == 'fidelity' else 1), (case, counts)
                 assert counts['attempts'] >= (2 if mode in {'retry', 'lost_ack', 'duplicate'} else 1), (case, counts)
-                summaries.append({'case': case, **counts})
+                fidelity = {}
+                if mode == 'fidelity':
+                    with sqlite3.connect(database) as db:
+                        evidence = [json.loads(row[0]) for row in db.execute(
+                            'SELECT body FROM evidence WHERE case_id=? ORDER BY rowid', (case,))]
+                        observed = [json.loads(row[0]) for row in db.execute(
+                            'SELECT body FROM projections WHERE case_id=? ORDER BY rowid', (case,))]
+                    fidelity = check_fidelity(events, evidence, observed)
+                summaries.append({'case': case, **counts, **fidelity})
                 (out / 'summary.json').write_text(json.dumps(summaries, indent=2) + '\n')
     finally:
-        receiver.shutdown(); receiver.server_close(); thread.join(timeout=5)
+        receiver.shutdown()
+        receiver.server_close()
+        thread.join(timeout=5)
     return summaries
 
 

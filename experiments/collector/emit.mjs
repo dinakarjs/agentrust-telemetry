@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import {LoggerProvider, SimpleLogRecordProcessor} from '@opentelemetry/sdk-logs';
 import {OTLPLogExporter} from '@opentelemetry/exporter-logs-otlp-http';
-import {SchemaValidator, TelemetryClient} from '../../packages/typescript/dist/index.js';
+import {SchemaValidator, TelemetryClient, spanAttributes} from '../../packages/typescript/dist/index.js';
 const [endpoint, input, evidence] = process.argv.slice(2);
 const provider = new LoggerProvider({processors: [new SimpleLogRecordProcessor({exporter: new OTLPLogExporter({url: endpoint})})]});
 const logger = provider.getLogger('agentrust-collector-acceptance');
@@ -10,7 +10,10 @@ const client = new TelemetryClient(SchemaValidator.bundled(), {
     const fd = fs.openSync(evidence, 'a');
     try {fs.writeSync(fd, JSON.stringify(event) + '\n'); fs.fsyncSync(fd);} finally {fs.closeSync(fd);}
   }},
-  logEmitter: {emit(record) {logger.emit({body: record.body, eventName: record.event_name});}},
+  logEmitter: {emit(record) {const ns = BigInt(record.timestamp_ns);
+    logger.emit({body: record.body, eventName: record.event_name,
+      timestamp: [Number(ns / 1000000000n), Number(ns % 1000000000n)],
+      attributes: spanAttributes(record.body)});}},
 });
 for (const event of JSON.parse(fs.readFileSync(input, 'utf8'))) {
   const result = client.emit(event);
