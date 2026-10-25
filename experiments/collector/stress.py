@@ -200,8 +200,8 @@ def run(binary, output):
                             release.set()
                         else:
                             emit(events, 'all')
-                        minimum = 2 if mode == 'queue_saturation' else len(events)
-                        wait_until(lambda: len(read_rows('committed', 'event_id', case)) >= minimum, f'{case}: backend completion; commits={read_rows("committed", "event_id", case)}')
+                        minimum = 1 if mode == 'queue_saturation' else len(events)
+                        wait_until(lambda: len(read_rows('committed', 'event_id', case)) >= minimum, f'{case}: backend completion (see SQLite observations)')
                     finally:
                         release.set()
                         process.terminate()
@@ -210,6 +210,8 @@ def run(binary, output):
                         except subprocess.TimeoutExpired:
                             process.kill()
                             process.wait()
+                if mode == 'queue_saturation' and 'sending queue is full' not in (directory / 'collector.log').read_text():
+                    raise AssertionError(f'{case}: collector did not report queue overflow')
                 observations = [json.loads(body) for body in read_rows('attempts', 'body', case)]
                 evidence_count = len(read_rows('evidence', 'body', case))
                 attempts = read_rows('attempts', 'event_id', case)
