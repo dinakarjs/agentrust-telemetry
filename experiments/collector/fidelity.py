@@ -39,5 +39,11 @@ def check_delivery(mode, events, evidence_count, attempts, commits):
             raise AssertionError("expected bounded queue loss was not independently observed")
     elif set(commits) != set(ids):
         raise AssertionError("a submitted event did not commit")
-    if mode == "reorder" and attempts != ids:
-        raise AssertionError("out-of-order input sequence was altered")
+    if mode == "reorder":
+        times = [int(event["time_unix_nano"]) for event in events]
+        if len(times) < 2 or not all(left > right for left, right in zip(times, times[1:])):
+            raise AssertionError("reorder control did not submit descending timestamps")
+        if set(attempts) != set(ids):
+            raise AssertionError("a reordered input was not independently observed")
+        # Concurrent SDK exports/HTTP requests need not preserve arrival order.
+        # check_projection binds every observed timestamp and body to its event ID.

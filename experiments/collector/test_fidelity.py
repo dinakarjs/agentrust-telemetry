@@ -45,11 +45,15 @@ class ObserverTests(unittest.TestCase):
         self.assertIs(type(any_value(value)['n']), int)
         self.assertIs(type(any_value(value)['flag']), bool)
 
-    def test_delivery_controls_detect_loss_and_reordering(self):
-        events = [self.event, {**self.event, 'event_id': 'two'}]
+    def test_reordered_input_preserves_events_without_transport_order_guarantee(self):
+        events = [self.event, {**self.event, 'event_id': 'two',
+                               'time_unix_nano': '1787079590000000000'}]
         check_delivery('reorder', events, 2, ['one', 'two'], ['one', 'two'])
+        check_delivery('reorder', events, 2, ['two', 'one'], ['one', 'two'])
+        with self.assertRaises(AssertionError):
+            check_delivery('reorder', list(reversed(events)), 2, ['one', 'two'], ['one', 'two'])
         for evidence, attempts, commits in ((1, ['one', 'two'], ['one', 'two']),
-                                            (2, ['two', 'one'], ['one', 'two']),
+                                            (2, ['one'], ['one', 'two']),
                                             (2, ['one'], ['one'])):
             with self.subTest(evidence=evidence, attempts=attempts, commits=commits), self.assertRaises(AssertionError):
                 check_delivery('reorder', events, evidence, attempts, commits)

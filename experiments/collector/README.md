@@ -92,7 +92,7 @@ not a change to the reference SDK or a claim about all exporters/backends.
 
 Six local observer tests catch changed nested fields, numeric type changes,
 wrong event names/timestamps, missing observations, dropped local evidence,
-reordered delivery and a vacuous saturation result. The pinned collector validates
+a non-descending input control and a vacuous saturation result. The pinned collector validates
 the generated configuration. Local collector startup still fails at process
 metrics registration before any delivery case. The supported-host run below
 validates the added cases; the twelve-case historical run above remains evidence
@@ -123,3 +123,16 @@ The first two stress workflow attempts exposed harness assumptions about consume
 scheduling and queue capacity. Both were corrected before the successful run.
 The artifact includes full inputs, configs, Collector/emitter logs, SQLite
 observations and both summary files. No runtime delivery policy was changed.
+
+## Transport-order control correction
+
+The documentation confirmation run 40204226853 observed all three TypeScript
+reversed-input events with intact bodies/timestamps, but their concurrent HTTP
+exports arrived in reverse order of emission. The original arrival-order
+assertion was too strong and failed. The corrected harness verifies descending
+input timestamps, the exact input event-ID sequence in local evidence, complete
+backend delivery and per-event projection fidelity. It records submitted and
+observed event-ID sequences separately, allowing transport reordering and
+retries. It does not claim an SDK or Collector arrival-order guarantee. The
+recorded twenty-case run above predates this observer correction; final-head
+confirmation is required.

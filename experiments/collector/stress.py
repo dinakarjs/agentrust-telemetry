@@ -213,13 +213,17 @@ def run(binary, output):
                 if mode == 'queue_saturation' and 'sending queue is full' not in (directory / 'collector.log').read_text():
                     raise AssertionError(f'{case}: collector did not report queue overflow')
                 observations = [json.loads(body) for body in read_rows('attempts', 'body', case)]
-                evidence_count = len(read_rows('evidence', 'body', case))
+                evidence = [json.loads(body) for body in read_rows('evidence', 'body', case)]
+                evidence_count = len(evidence)
+                if mode == 'reorder' and [item['event_id'] for item in evidence] != [item['event_id'] for item in events]:
+                    raise AssertionError(f'{case}: local evidence did not retain reversed input order')
                 attempts = read_rows('attempts', 'event_id', case)
                 commits = read_rows('committed', 'event_id', case)
                 check_projection(events, observations)
                 check_delivery(mode, events, evidence_count, attempts, commits)
                 summaries.append({'case': case, 'evidence': evidence_count, 'attempts': len(attempts),
-                                  'committed': len(commits), 'body_and_timestamp_fidelity': True})
+                                  'committed': len(commits), 'body_and_timestamp_fidelity': True,
+                                  'submitted_ids': [item['event_id'] for item in events], 'observed_ids': attempts})
                 (output / 'summary.json').write_text(json.dumps(summaries, indent=2) + '\n')
     finally:
         release.set()
