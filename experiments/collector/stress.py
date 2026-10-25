@@ -192,14 +192,16 @@ def run(binary, output):
                             release.set()
                             process = start()
                             emit(events[1:], 'after')
+                        elif mode == 'queue_saturation':
+                            emit(events[:1], 'seed')
+                            if not entered.wait(5):
+                                raise TimeoutError('saturation never blocked a consumer')
+                            emit(events[1:], 'pressure')
+                            release.set()
                         else:
                             emit(events, 'all')
-                            if mode == 'queue_saturation':
-                                if not entered.is_set():
-                                    raise AssertionError('saturation never blocked a consumer')
-                                release.set()
                         minimum = 2 if mode == 'queue_saturation' else len(events)
-                        wait_until(lambda: len(read_rows('committed', 'event_id', case)) >= minimum, 'backend completion')
+                        wait_until(lambda: len(read_rows('committed', 'event_id', case)) >= minimum, f'{case}: backend completion; commits={read_rows("committed", "event_id", case)}')
                     finally:
                         release.set()
                         process.terminate()
