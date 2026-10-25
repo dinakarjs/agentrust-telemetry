@@ -31,8 +31,16 @@ jobs:
         env:
           PYTHONPATH: src
         run: python experiments/collector/run.py --collector "$RUNNER_TEMP/otelcol" --output collector-results
+      - name: Run observer controls and stress cases
+        env:
+          PYTHONPATH: src
+        run: |
+          python -m unittest discover -s experiments/collector -p 'test_*.py'
+          python experiments/collector/stress.py --collector "$RUNNER_TEMP/otelcol" --output collector-stress-results
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.0
         if: always()
         with:
           name: collector-experiment-evidence
-          path: collector-results
+          path: |
+            collector-results
+            collector-stress-results

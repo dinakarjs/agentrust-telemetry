@@ -73,3 +73,27 @@ Python 3.12.15 and Node 22.23.3: all twelve cases passed. For both languages:
 The run retains configs, collector/emitter logs, synthetic inputs, SQLite observer
 and per-case summary in the `collector-experiment-evidence` artifact. These
 measurements establish the listed synthetic pipeline behaviors only.
+
+## Added stress and fidelity checks (new head)
+
+`stress.py` adds four cases for each SDK: an eight-event healthy queue control,
+an eight-event blocked-consumer/one-slot queue saturation case, a collector kill
+between backend commit and acknowledgement followed by a fresh post-restart event,
+and three events emitted with descending source timestamps. The sending queue is
+in memory; this does not claim persistent queue recovery. The receiver retains
+complete normalized bodies, event names and nanosecond timestamps in SQLite.
+Every observed body is compared to its submitted event, and every non-saturation
+case must account for all committed event IDs. Saturation requires both positive
+commits and independently observed loss relative to local evidence.
+
+The TypeScript experiment emitter now passes the normalized event timestamp to
+the OTel SDK as an integer seconds/nanoseconds pair. This is experiment wiring,
+not a change to the reference SDK or a claim about all exporters/backends.
+
+Six local observer tests catch changed nested fields, numeric type changes,
+wrong event names/timestamps, missing observations, dropped local evidence,
+reordered delivery and a vacuous saturation result. The pinned collector validates
+the generated configuration. Local collector startup still fails at process
+metrics registration before any delivery case; the eight new real-pipeline cases
+are unvalidated until the updated Ubuntu workflow completes. The twelve-case
+historical run above remains evidence only for its original head.
