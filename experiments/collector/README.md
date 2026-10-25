@@ -35,8 +35,8 @@ uses a unique constraint for idempotency; the test must not be interpreted as a
 collector exactly-once guarantee. Retry observations cover the whole pipeline,
 not a unique attribution to collector retry versus exporter retry. The restart
 case restarts an idle collector before emission; it does not test in-flight recovery.
-Queues are disabled; queue saturation and out-of-order delivery remain uncovered.
-Receiver records contain event IDs; assertions compare row counts, not full projection fidelity.
+In these twelve baseline cases queues are disabled and assertions compare row counts.
+The eight stress cases below add queue pressure, reordering and full projection checks.
 
 ## Validation and local host limitation
 
@@ -94,6 +94,32 @@ Six local observer tests catch changed nested fields, numeric type changes,
 wrong event names/timestamps, missing observations, dropped local evidence,
 reordered delivery and a vacuous saturation result. The pinned collector validates
 the generated configuration. Local collector startup still fails at process
-metrics registration before any delivery case; the eight new real-pipeline cases
-are unvalidated until the updated Ubuntu workflow completes. The twelve-case
-historical run above remains evidence only for its original head.
+metrics registration before any delivery case. The supported-host run below
+validates the added cases; the twelve-case historical run above remains evidence
+only for its original head.
+
+## Recorded stress run
+
+[Run 40204045774](https://github.com/agentrust-io/agentrust-telemetry/actions/runs/40204045774),
+code head `02d5c64572ee8341f3a4d54c10e8a400a51d76f8`, Ubuntu,
+Python 3.12.15: all twelve baseline cases, six observer unit tests, and all eight
+stress cases passed. Each language produced the same counts:
+
+| Case | Local evidence | Observed attempts | Backend commits |
+| --- | ---: | ---: | ---: |
+| Healthy queue | 8 | 8 | 8 |
+| Saturation | 8 | 1 | 1 |
+| In-flight restart | 2 | 2 | 2 |
+| Reversed timestamp input | 3 | 3 | 3 |
+
+Every observed stress record retained its complete normalized body, event name
+and nanosecond timestamp. Saturation waits for the seeded request to reach the
+blocked receiver before submitting pressure. Collector 0.163.2 counts that
+in-flight request against this one-slot queue capacity, so the seeded event alone
+committed; the runner also requires the Collector's explicit queue-full log.
+These are observed counts for this run, not universal retry/delivery guarantees.
+
+The first two stress workflow attempts exposed harness assumptions about consumer
+scheduling and queue capacity. Both were corrected before the successful run.
+The artifact includes full inputs, configs, Collector/emitter logs, SQLite
+observations and both summary files. No runtime delivery policy was changed.
