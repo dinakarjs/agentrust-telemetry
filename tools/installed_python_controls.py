@@ -7,12 +7,33 @@ from importlib.metadata import version
 from pathlib import Path
 
 
+EXPECTED_FIXTURES = {
+    "valid": [
+        "action.json",
+        "approval.json",
+        "data-flow.json",
+        "evidence.json",
+        "policy-decision.json",
+        "usage.json"
+    ],
+    "invalid": [
+        "action-without-digest.json",
+        "aggregate-cost-without-rollup.json",
+        "model-call-with-rollup.json",
+        "numeric-timestamp.json",
+        "raw-content.json",
+        "usage-without-measurement.json",
+        "zero-trace-id.json"
+    ]
+}
+
+
 def check_controls(controls, validator, factory, validation_error):
     counts = {}
     for kind in ("valid", "invalid"):
         cases = controls["fixtures"][kind]
-        if not cases:
-            raise AssertionError(f"missing {kind} controls")
+        if sorted(case["name"] for case in cases) != EXPECTED_FIXTURES[kind]:
+            raise AssertionError(f"missing or unexpected {kind} controls")
         for case in cases:
             try:
                 validator.validate(case["event"])

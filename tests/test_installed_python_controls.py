@@ -31,8 +31,7 @@ class InstalledControlsTests(unittest.TestCase):
 
     def test_real_controls(self):
         counts = controls_module.check_controls(self.controls, self.validator, self.factory, self.error)
-        self.assertGreater(counts["valid"], 0)
-        self.assertGreater(counts["invalid"], 0)
+        self.assertEqual(counts, {"valid": 6, "invalid": 7})
 
     def test_accept_all_is_caught(self):
         with self.assertRaisesRegex(AssertionError, "invalid control admitted"):
@@ -56,3 +55,13 @@ class InstalledControlsTests(unittest.TestCase):
                 controls = {**self.controls, "fixtures": {**self.controls["fixtures"], kind: []}}
                 with self.assertRaisesRegex(AssertionError, "missing"):
                     controls_module.check_controls(controls, self.validator, self.factory, self.error)
+
+    def test_partial_and_renamed_controls_are_caught(self):
+        for kind in ("valid", "invalid"):
+            cases = self.controls["fixtures"][kind]
+            for changed in (cases[1:], [{**cases[0], "name": "renamed.json"}, *cases[1:]],
+                            [cases[0], *cases]):
+                with self.subTest(kind=kind, names=[c["name"] for c in changed]):
+                    controls = {**self.controls, "fixtures": {**self.controls["fixtures"], kind: changed}}
+                    with self.assertRaisesRegex(AssertionError, "missing or unexpected"):
+                        controls_module.check_controls(controls, self.validator, self.factory, self.error)
