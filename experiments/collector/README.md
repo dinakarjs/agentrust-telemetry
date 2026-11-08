@@ -86,6 +86,14 @@ Every observed body is compared to its submitted event, and every non-saturation
 case must account for all committed event IDs. Saturation requires both positive
 commits and independently observed loss relative to local evidence.
 
+The saturation observer additionally requires the first submitted event (the
+seed held at the receiver before pressure is applied) in both observed attempts
+and backend commits. A different event cannot satisfy that identity check.
+Additional pressure-event commits, duplicate attempts and reordered observations
+remain allowed as long as the existing bounded-loss condition holds. The focused
+observer controls exercise missing, substituted and reordered seed identities;
+the historical pipeline runs below predate this strengthened assertion.
+
 The TypeScript experiment emitter now passes the normalized event timestamp to
 the OTel SDK as an integer seconds/nanoseconds pair. This is experiment wiring,
 not a change to the reference SDK or a claim about all exporters/backends.

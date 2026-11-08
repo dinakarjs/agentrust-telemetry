@@ -64,3 +64,23 @@ class ObserverTests(unittest.TestCase):
         for commits in ([], ['one', 'two']):
             with self.subTest(commits=commits), self.assertRaises(AssertionError):
                 check_delivery('queue_saturation', events, 2, commits, commits)
+
+    def test_saturation_requires_seed_identity_in_attempts_and_commits(self):
+        events = [self.event, {**self.event, 'event_id': 'two'},
+                  {**self.event, 'event_id': 'three'}]
+        for attempts, commits in ((['one'], ['one']),
+                                  (['two', 'one', 'one'], ['two', 'one'])):
+            with self.subTest(attempts=attempts, commits=commits):
+                check_delivery('queue_saturation', events, 3, attempts, commits)
+        for attempts, commits in ((['two'], ['two']),
+                                  (['one', 'two'], ['two']),
+                                  (['two'], ['one'])):
+            with self.subTest(attempts=attempts, commits=commits):
+                with self.assertRaisesRegex(AssertionError, 'saturation seed'):
+                    check_delivery('queue_saturation', events, 3, attempts, commits)
+
+    def test_saturation_seed_is_first_input_not_a_fixed_identifier(self):
+        events = [{**self.event, 'event_id': 'two'}, self.event]
+        check_delivery('queue_saturation', events, 2, ['two'], ['two'])
+        with self.assertRaisesRegex(AssertionError, 'saturation seed'):
+            check_delivery('queue_saturation', events, 2, ['one'], ['one'])

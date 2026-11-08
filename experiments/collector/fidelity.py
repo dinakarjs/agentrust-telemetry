@@ -37,6 +37,11 @@ def check_delivery(mode, events, evidence_count, attempts, commits):
     if mode == "queue_saturation":
         if not 0 < len(set(commits)) < len(events):
             raise AssertionError("expected bounded queue loss was not independently observed")
+        # The runner blocks the first submitted request before applying pressure.
+        # A different committed event cannot stand in for that seeded request.
+        seed = ids[0]
+        if seed not in attempts or seed not in commits:
+            raise AssertionError("saturation seed was not observed and committed")
     elif set(commits) != set(ids):
         raise AssertionError("a submitted event did not commit")
     if mode == "reorder":
